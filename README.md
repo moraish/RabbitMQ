@@ -1,4 +1,4 @@
-## Image Used
+### Image Used
 
 docker run -it --rm --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:4-management
 
@@ -9,15 +9,13 @@ docker run -it --rm --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:4-manag
     username:   guest
     password:   guest
 
-## Terminology 
+### Terminology 
 
 **Producer**: Sender of messages.
 
 **Queue**: Postbox. Essentially, a large message buffer. Many producers can send messages to one queue. Many consumers can recieve messages from one queue.
 
 **Consumer**: Reviver of messages. 
-
-## Programs
 
 ### 1.0 Hello World
 print("Hello World!") of Messaging. 
@@ -133,10 +131,126 @@ Performs a simple function -
 - Recieved messages from a producer
 - Pushes the messages to a queue
 
-But it must know 
+But it must know what to do with each message, i.e.
+- Should it be appended to a queue
+- Should it be appended to many queues
+- Should it be discarded
 
-    
+#### Exchnage Type 
+- Fanout
+Broadcasts all messages to all queues
+
+``` bash
+sudo rabbutmqcli list_exchanges
+```
+
+``` python
+channel.basic_publish(exchange="logs",
+                        routing_key="", 
+                        body=message)
+
+```
+
+#### Temporary Queue
+
+Declare with a random name:
+
+``` python
+result = channel.queue_declare(queue='')
+```
+
+Queue should be deleted when the consumer connection is closed:
+
+``` python
+result = channel.queue_declare(queue='', exclusive=True)
+
+```
+
+#### Programs
+
+**send_log.py**
+- Establish connection to RabbitMQ server
+- Declare exchange of type fanout
+- Send a message to the exchange
+- Close the connection
+
+
+**receive_log.py**
+- Establish a connection to RabbitMQ server
+- Declare exchange of type fanout
+- Declare a temp queue
+- Bind the queue to the exchange
+- Consume the message
 
 
 
+**Note** 
+In this case - messages that were produced before the consumer is setup are lost. 
 
+### 4.0 Routing
+Now, instead of a reciever getting all the messages, we are going to be subscribing only to a subset of the messages. We do this via bindings. 
+
+Fanout exchanges do not support this behavior. We will instead move to direct exchanges. 
+Message goes to the queue who's ```binding_key``` exactly matches the ```routing_key``` of the message. 
+
+- Publisher send a routing key. 
+- Based on this routing key, we send the message to the right queue. 
+- The right queue is decided by the binding_key. 
+
+#### Programs
+**send_logs.py**
+- Connect to Server
+- Declare an exchange
+- Publish with **Correct** Routing Key
+- Close the connection
+
+
+**receieve_logs.py**
+- Connect to Server
+- Declare exchange
+- Declare temp queue
+- Bind queue with exchange with the **Correct** Routing Key
+- Start Consuming
+
+
+### 5.0 Topics
+Routing improves the system but does not provide flexibility. 
+Let's say we want to filter / consume messages based on 2 criteria now - 
+- Severity (same as previous example)
+- Source
+
+#### Exchange Type = Topic
+Must be a list of words delimited by dots. Examples stock.usd.nyse, quick.orange.rabbit
+Binding Key, i.e. routing key in the queue binding function must be in the same format.
+
+**Special Cases**
+- * Star: can substitute for exactly one word
+- `# Hash : can substitute for zero or more words 
+
+#### Programs
+**send_logs.py**
+- Connect to server
+- Declare a topic exchange
+- Publish a message with a specific topic
+- Close the connection
+
+**receieve_logs.py**
+- Connect to server
+- Declare a topic exchange
+- Declare a temp queue and bind to exchange based on specific topics
+- start consuming
+
+
+### 6.0 RPC
+Run a function on a different computer and wait for the results. 
+We will build a client and a scalable RPC server. 
+
+#### Client Interface
+We create a simple client class, which exposes a method named call. 
+
+**Problem with RPC**: If not done properly, RPC code is unmanagable. 
+- Ensure it is obvious which RPC call is local, and which is remote.
+- Document
+- Handle error cases
+
+Better idea is to use Async pipelines. 
